@@ -1,0 +1,59 @@
+<style>pre code {border: none; background-color: none; padding: 0;} pre, code {border: 1px solid #ddd; background-color: #eee;} pre {padding: 1em;} h1, h2, h3, h4, h5, h6{font-family: Helvetica, Arial, sans-serif;} body {margin: 3em 6em 3em 6em;}</style>
+
+## BISmark Simulcast: Parallelized firmware installation
+Stephen Woodrow<br />
+<srwoodrow@gmail.com>
+
+### Overview
+
+To achieve scale of deployment with reasonable efficiency, it is necessary to
+install and update the firmware of many BISmark gateways in parallel. However,
+this is not simply a matter of connecting a number of devices to a switch. Each
+gateway's LAN is addressed with the same range and supplies DHCP addresses.
+Further, the firmware must be installed either though HTTP (in the case of the
+factory Netgear firmware) or SCP and SSH (in the case of the
+BISmark/{cero,open,uber}WRT firmware).
+
+BISmark Simulcast overcomes these challenges by connecting each device to a
+802.1Q VLAN-capable switch in order to isolate the devices and allow each
+device to be accessed in spite of their overlapping IP address ranges. These
+VLANs are demultiplexed on a specially-configured Debian virtual machine
+configured with iptables to handle routing to each VLAN interface, and
+processes to manage the firmare upgrade and configuration of each device.
+
+
+### 1. Configuring switch
+
+The following instructions will configure a 48-port gigabit ethernet Pronto
+XorPlus-based switch for installing/updating the firmware of 47 BISmark
+gateways in parallel.
+
+1. Connect a machine to ETH1 (management-ethernet eth0) port on the front of
+the 48-port Pronto switch.
+
+    **Note that the switch is not configured with security in mind; do not
+    connect it to the Internet.**
+
+2. Set the IP address of the ethernet interface connected to the switch to
+192.168.1.2 with a subnet mask suitable for the 192.168.1.0/24 network
+(255.255.255.0).
+
+3. Copy the configuration file to the switch with the following shell command:
+
+        scp pica_48port_trunkedvlans.conf root@192.168.1.1:/cf_card/CONFIG/pica_startup.boot
+
+    The password, when requested, is `pica8`.
+
+4. Restart the switch.
+
+When the switch comes back up, it will now be configured to tag native ethernet
+frames with VLAN tags on ports 1-47. The VLAN tags are calculated to be (100 +
+switch port number), so ethernet frames transmitted to port 23 would be tagged
+with VLAN 123. Ports 1-47 can be connected to LAN ports (not the WAN port) on
+WNDR3700 routers for firmware upgrading/installation.
+
+Port 48 is a VLAN trunking port for VLAN tags 101-147, and must be connected to
+the machine that will be controlling and directing the firmware installation
+effort.
+
+### 2. Configuring upgrade manager
