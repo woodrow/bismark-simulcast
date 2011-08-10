@@ -36,8 +36,11 @@ modprobe 8021q
 modprobe iptable_nat
 
 # clear iptables
-iptables --flush
+iptables -t nat --flush
 
+# clear routing table
+ip route flush proto static
+ip neighbor flush nud permanent
 
 ##------------------------------------------------------------------------------
 ## configure routing table: add route for subnet, even though we won't actually
@@ -59,7 +62,10 @@ for ((i=1; i<=$NUM_VLANS; i++))
 do
     VLAN_ID=$[$i+100]
     VIF=$HOST_BRIDGE_IF_NAME.$VLAN_ID
-    vconfig add $HOST_BRIDGE_IF_NAME $VLAN_ID
+    if [ ! -e /proc/net/vlan/$VIF ]
+    then
+        vconfig add $HOST_BRIDGE_IF_NAME $VLAN_ID
+    fi
     ifconfig $VIF up
 
     for SUBNET in $FACTORY_SUBNET $BISMARK_SUBNET
@@ -68,24 +74,36 @@ do
         OCTETS=$(echo $SUBNET | grep -o "\([0-9]\+\.\)\{2\}[0-9]\+")
 
         ip route add $OCTETS.$i/32 protocol static metric 20 dev $VIF
+        ip neighbor add $OCTETS.$i dev $VIF \
+            lladdr ff:ff:ff:ff:ff:ff nud permanent > /dev/null
+        if [ $? -ne 0 ]
+        then
+            ip neighbor change $OCTETS.$i dev $VIF \
+                lladdr ff:ff:ff:ff:ff:ff nud permanent
+        fi
 
-        # NAT to rewrite source address on incoming packets
-        ip rule add iif $VIF from $SUBNET \
-            nat $OCTETS.$i priority $[IPROUTE_PRIO++]
-
-        ## NAT to masquerade on outgoing packets
-        #ip rule add oif $VIF nat 0 priority $[IPROUTE_PRIO++]
-
-        #ALTERNATE masquerade solution
+        ## Rewrite source to masquerade
+        #iptables -t nat -A POSTROUTING \
+        #    -o $VIF \
+        #    -j MASQUERADE
+        ## ...or...
+        # SNAT
         iptables -t nat -A POSTROUTING \
             -o $VIF \
-            -j MASQUERADE
+            -s $HOST_BRIDGE_IF_ADDR \
+            -j SNAT --to-source $OCTETS.101
 
+        # Rewrite destination to match gateway address
+        iptables -t nat -A OUTPUT \
+            -o $VIF \
+            -d $OCTETS.$i \
+            -j DNAT --to-destination $OCTETS.1
+
+        # Redirect incoming traffic to proper address
         iptables -t nat -A PREROUTING \
             -i $VIF \
-            -s $SUBNET \
-            -j DNAT \
-            --to-destination $HOST_BRIDGE_IF_ADDR
+            -d $SUBNET \
+            -j DNAT --to-destination $HOST_BRIDGE_IF_ADDR
 
         ## need to do something about this -- this doesn't work
         #iptables -A POSTROUTING -t nat \
@@ -104,16 +122,6 @@ do
         ## (from a client/flashing application) on a dhclient-daemonized
         ## interface?
     done
-done
-
-# overall iptables rules (to be added after other rules -- last rule in the
-# chain)
-for SUBNET in $FACTORY_SUBNET $BISMARK_SUBNET
-do
-    OCTETS=$(echo $SUBNET | grep -o "\([0-9]\+\.\)\{2\}[0-9]\+")
-
-    iptables -A OUTPUT -t nat -d $SUBNET \
-        -j DNAT --to-destination $OCTETS.1
 done
 
 ip route flush cache
