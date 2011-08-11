@@ -68,6 +68,14 @@ do
     fi
     ifconfig $VIF up
 
+    # set up egress (root) qdisc
+    tc qdisc del dev $VIF root > /dev/null
+    tc qdisc add dev $VIF root handle $VLAN_ID: htb
+
+    # set up ingress qdisc
+    tc qdisc del dev $VIF ingress > /dev/null
+    tc qdisc add dev $VIF ingress
+
     for SUBNET in $FACTORY_SUBNET $BISMARK_SUBNET
     do
 
@@ -82,41 +90,45 @@ do
                 lladdr ff:ff:ff:ff:ff:ff nud permanent
         fi
 
-        ## Rewrite source to masquerade
-        #iptables -t nat -A POSTROUTING \
-        #    -o $VIF \
-        #    -j MASQUERADE
-        ## ...or...
-        # SNAT
-        iptables -t nat -A POSTROUTING \
-            -o $VIF \
-            -s $HOST_BRIDGE_IF_ADDR \
-            -j SNAT --to-source $OCTETS.101
+        # Rewrite source address of outgoing packets
+        # action nat egress = rewrite src addr
+        tc filter add dev $VIF parent $VLAN_ID: pref $[++IPROUTE_PRIO] \
+        protocol ip \
+        u32 match ip dst $OCTETS.$i \
+        action nat egress $HOST_BRIDGE_IF_ADDR $OCTETS.101 \
+        continue
+        # this could probably be action nat egress 0.0.0.0/0 ..., but this
+        # is a work around
 
-        # Rewrite destination to match gateway address
-        iptables -t nat -A OUTPUT \
-            -o $VIF \
-            -d $OCTETS.$i \
-            -j DNAT --to-destination $OCTETS.1
+        # Rewrite destination address of outgoing packets (NOTE 1)
+        # action nat ingress = rewrite dst addr
+        tc filter add dev $VIF parent $VLAN_ID: pref $[++IPROUTE_PRIO] \
+        protocol ip \
+        u32 match ip dst $OCTETS.$i \
+        action nat ingress $OCTETS.$i $OCTETS.1 \
+        pass
 
-        # Redirect incoming traffic to proper address
-        iptables -t nat -A PREROUTING \
-            -i $VIF \
-            -d $SUBNET \
-            -j DNAT --to-destination $HOST_BRIDGE_IF_ADDR
+        # Rewrite destination address of incoming packets
+        # action nat ingress = rewrite dst addr
+        tc filter add dev $VIF parent ffff: pref $[++IPROUTE_PRIO] \
+        protocol ip \
+        u32 match ip src $OCTETS.1 \
+        action nat ingress $OCTETS.101 $HOST_BRIDGE_IF_ADDR \
+        continue
+        # this could probably be action nat ingress 0.0.0.0/0 ..., but this
+        # is a work around
 
-        ## need to do something about this -- this doesn't work
-        #iptables -A POSTROUTING -t nat \
-        #    -i $VIF \
-        #    -j SNAT \
-        #    --to-source $OCTETS.$i
-
-        ## this isn't valid syntax (SNAT only belongs in POSTROUTING), but is
-        ## something I was worried about :P
-        #iptables -A PREROUTING -t nat -i $VIF \
-        #    -j SNAT --to-source $FACTORY_OCTETS.$i
+        # Rewrite source address of incoming packets
+        # action nat egress = rewrite src addr
+        tc filter add dev $VIF parent ffff: pref $[++IPROUTE_PRIO] \
+        protocol ip \
+        u32 match ip src $OCTETS.1 \
+        action nat egress $OCTETS.1 $OCTETS.$i \
+        pass
 
         # TODO: TURN THIS ON LATER!
+        # TODO UPDATE: this is no longer necessary because i'm just
+        # bruteforcing my address as 192.168.x.101
         #dhclient -nw $VIF
         ## TODO: what happens when we do ifconfig ... down and ifconfig ... up
         ## (from a client/flashing application) on a dhclient-daemonized
