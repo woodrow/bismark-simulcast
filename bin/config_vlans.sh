@@ -80,6 +80,9 @@ do
     tc qdisc del dev $VIF ingress > /dev/null
     tc qdisc add dev $VIF ingress
 
+    # TODO: CONSIDER USING MULTIPLE ROUTING TABLES FOR THE DIFFERENT ADDRESS
+    #       SCHEMES/RANGES INVOLVED
+    #       ALSO, s/ifconfig/ip addr/
     for SUBNET in $FACTORY_SUBNET $BISMARK_SUBNET
     do
 
@@ -88,7 +91,13 @@ do
         IF_ADDR=$OCTETS.254
         GW_ADDR=$OCTETS.1
 
-        ip route add $OCTETS.$i/32 protocol static metric 20 dev $VIF
+        # move ifconfig stuff here...
+        # have subnets come from an array, and iterate through them
+        # put into separate routing tables for each subnet
+        # don't forget to construct `ip rule` rules.
+
+        ip route add $VIF_ADDR/32 dev $VIF src $IF_ADDR protocol static \
+            metric 20
 
         # rewrite outgoing ARP
         VIF_ADDR_HEX=$(printf '%02x' ${VIF_ADDR//./ })
