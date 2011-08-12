@@ -44,19 +44,6 @@ ip route flush proto static
 # clear arp cache
 ip neighbor flush nud permanent
 
-##------------------------------------------------------------------------------
-## configure routing table: add route for subnet, even though we won't actually
-## use the route (this is to make sure the host knows there's a route).
-#    ip route add $SUBNET metric 10 dev $HOST_BRIDGE_IF_NAME
-
-#-------------------------------------------------------------------------------
-# iptables rules to be added before interface-specific rules -- first rules in
-#   the chain
-
-    ## TODO: is this necessary? or should the masquerade handle this?
-    #iptables -A PREROUTING -t nat -s $SUBNET \
-    #    -j DNAT --to-destination $HOST_BRIDGE_IF_ADDR
-
 #-------------------------------------------------------------------------------
 # configure vlans
 IPROUTE_PRIO=100
