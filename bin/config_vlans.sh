@@ -84,24 +84,14 @@ do
     do
 
         OCTETS=$(echo $SUBNET | grep -o "\([0-9]\+\.\)\{2\}[0-9]\+")
+        VIF_ADDR=$OCTETS.$i
+        IF_ADDR=$OCTETS.254
+        GW_ADDR=$OCTETS.1
 
         ip route add $OCTETS.$i/32 protocol static metric 20 dev $VIF
-        #ip neighbor add $OCTETS.$i dev $VIF \
-        #    lladdr ff:ff:ff:ff:ff:ff nud permanent > /dev/null
-        #if [ $? -ne 0 ]
-        #then
-        #    ip neighbor change $OCTETS.$i dev $VIF \
-        #        lladdr ff:ff:ff:ff:ff:ff nud permanent
-        #fi
 
-        # TODO: ARP is still a problem -- the stack does an ARP request on the
-        # un-rewritten address
-        # printf '%02X' ${IP_ADDR//./ };
-        #
         # rewrite outgoing ARP
-        VIF_ADDR=$OCTETS.$i
         VIF_ADDR_HEX=$(printf '%02x' ${VIF_ADDR//./ })
-        GW_ADDR=$OCTETS.1
         GW_ADDR_HEX=$(printf '%02x' ${GW_ADDR//./ })
         tc filter add dev $VIF parent $VLAN_ID: pref $[++IPROUTE_PRIO] \
             protocol arp \
@@ -126,36 +116,32 @@ do
             munge offset 16 u16 set 0x$VIF_ADDR_LHEX \
             > /dev/null
 
-        # TODO: UGGH, MASQUERADING IS STILL NECESSARY, or at least i need to
-        # configure interface addresses, else netgear box arps :(
-        # also, be careful with ifconfig $VIF up and dhclient, as these change
-        # the routing table, etc.
-
         # Rewrite source address of outgoing packets
+        # TODO: this may not be necessary -- test?
         # action nat egress = rewrite src addr
         tc filter add dev $VIF parent $VLAN_ID: pref $[++IPROUTE_PRIO] \
             protocol ip \
-            u32 match ip dst $OCTETS.$i \
-            action nat egress 0.0.0.0/0 $OCTETS.254 \
+            u32 match ip dst $VIF_ADDR \
+            action nat egress 0.0.0.0/0 $IF_ADDR \
             continue
         # action nat egress $HOST_BRIDGE_IF_ADDR $OCTETS.254 \
         # this should probably be action nat egress 0.0.0.0/0 ..., but this
         # is a work around
 
-        # Rewrite destination address of outgoing packets (NOTE 1)
+        # Rewrite destination address of outgoing packets
         # action nat ingress = rewrite dst addr
         tc filter add dev $VIF parent $VLAN_ID: pref $[++IPROUTE_PRIO] \
             protocol ip \
-            u32 match ip dst $OCTETS.$i \
-            action nat ingress $OCTETS.$i $OCTETS.1 \
+            u32 match ip dst $VIF_ADDR \
+            action nat ingress $VIF_ADDR $GW_ADDR \
             pass
 
         ## Rewrite destination address of incoming packets
         ## action nat ingress = rewrite dst addr
         #tc filter add dev $VIF parent ffff: pref $[++IPROUTE_PRIO] \
         #protocol ip \
-        #u32 match ip src $OCTETS.1 \
-        #action nat ingress $OCTETS.254 $HOST_BRIDGE_IF_ADDR \
+        #u32 match ip src $GW_ADDR \
+        #action nat ingress $IF_ADDR $HOST_BRIDGE_IF_ADDR \
         #continue
         ## this could probably be action nat ingress 0.0.0.0/0 ..., but this
         ## is a work around
@@ -164,17 +150,9 @@ do
         # action nat egress = rewrite src addr
         tc filter add dev $VIF parent ffff: pref $[++IPROUTE_PRIO] \
             protocol ip \
-            u32 match ip src $OCTETS.1 \
-            action nat egress $OCTETS.1 $OCTETS.$i \
+            u32 match ip src $GW_ADDR \
+            action nat egress $GW_ADDR $VIF_ADDR \
             pass
-
-        # TODO: TURN THIS ON LATER!
-        # TODO UPDATE: this is no longer necessary because i'm just
-        # bruteforcing my address as 192.168.x.101
-        #dhclient -nw $VIF
-        ## TODO: what happens when we do ifconfig ... down and ifconfig ... up
-        ## (from a client/flashing application) on a dhclient-daemonized
-        ## interface?
     done
 done
 
