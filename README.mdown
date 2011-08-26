@@ -1,3 +1,14 @@
 ## BISmark Simulcast: Parallelized firmware installation
 Stephen Woodrow<br />
 <srwoodrow@gmail.com>
+
+### Requirements
+
+- An ethernet switch supporting 802.1Q (VLANs)
+- VirtualBox or another x86 desktop virtualization application (VMware
+  workstation, etc.)
+- Ubuntu Server 11.04 install image (.iso)
+
+### Getting started
+
+Start by reading doc/setup.mdown
