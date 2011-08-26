@@ -1,31 +1,38 @@
 <style>pre code {border: none; background-color: none; padding: 0;} pre, code {border: 1px solid #ddd; background-color: #eee;} pre {padding: 1em;} h1, h2, h3, h4, h5, h6{font-family: Helvetica, Arial, sans-serif;} body {margin: 3em 6em 3em 6em;}</style>
 
-## BISmark Simulcast: Parallelized firmware installation
+## Bismark Simulcast: Parallelized firmware installation
 Stephen Woodrow<br />
 <srwoodrow@gmail.com>
 
 ### Overview
 
 To achieve scale of deployment with reasonable efficiency, it is necessary to
-install and update the firmware of many BISmark gateways in parallel. However,
+install and update the firmware of many Bismark gateways in parallel. However,
 this is not simply a matter of connecting a number of devices to a switch. Each
 gateway's LAN is addressed with the same range and supplies DHCP addresses.
 Further, the firmware must be installed either though HTTP (in the case of the
 factory Netgear firmware) or SCP and SSH (in the case of the
-BISmark/{cero,open,uber}WRT firmware).
+Bismark/{cero,open,uber}WRT firmware).
 
-BISmark Simulcast overcomes these challenges by connecting each device to a
+Bismark Simulcast overcomes these challenges by connecting each device to a
 802.1Q VLAN-capable switch in order to isolate the devices and allow each
 device to be accessed in spite of their overlapping IP address ranges. These
-VLANs are demultiplexed on a specially-configured Debian virtual machine
-configured with iptables to handle routing to each VLAN interface, and
-processes to manage the firmare upgrade and configuration of each device.
+VLANs are demultiplexed on a specially-configured virtual machine configured
+with iptables to handle routing to each VLAN interface, and processes to manage
+the firmare upgrade and configuration of each device.
 
 
-### 1. Configuring switch
+### 1. Configuring the switch
+
+The general idea is to configure all but on of the ports on the ethernet switch
+as a separate VLAN, to achieve isolation between the devices. Each of these
+VLANs is then trunked out of the switch on a trunking port, which is connected
+to the virtual machine and demultiplexed accordingly.
+
+#### Example configuration for Pronto
 
 The following instructions will configure a 48-port gigabit ethernet Pronto
-XorPlus-based switch for installing/updating the firmware of 47 BISmark
+XorPlus-based switch for installing/updating the firmware of 47 Bismark
 gateways in parallel.
 
 1. Connect a machine to ETH1 (management-ethernet eth0) port on the front of
@@ -40,7 +47,7 @@ the 48-port Pronto switch.
 
 3. Copy the configuration file to the switch with the following shell command:
 
-        scp pica_48port_trunkedvlans.conf root@192.168.1.1:/cf_card/CONFIG/pica_startup.boot
+        scp switch_config/pronto/pica_48port_trunkedvlans.conf root@192.168.1.1:/cf_card/CONFIG/pica_startup.boot
 
     The password, when requested, is `pica8`.
 
@@ -56,4 +63,111 @@ Port 48 is a VLAN trunking port for VLAN tags 101-147, and must be connected to
 the machine that will be controlling and directing the firmware installation
 effort.
 
-### 2. Configuring upgrade manager
+### 2. Configuring the virtual machine
+
+    MAKE SURE HOST OS DOESN'T HAVE ANY VIRTUAL INTERFACES ON THE WIRED ETHERNET
+    CONNECTED TO SWITCH -- THIS WILL STRIP VLAN-TAGGED FRAMES INTENDED FOR THE
+    VM
+
+#### Installation Procedure for Ubuntu Server
+
+##### Virtualbox settings
+- name: bismark-simulcast-ubuntu
+- configuration: Linux/Ubuntu
+- base memory: 512MB
+- HD: dynamically expanding, 8GB
+- network:
+    - adapter 1 (eth0):
+        - paravirtualized
+        - NAT
+    - adapter 2 (eth1):
+        - paravirtualized
+        - host-only; name: vboxnet0
+    - adapter 3 (eth2):
+        - paravirtualized
+        - bridged to eth0
+
+##### OS installation
+- image: ubuntu-11.04-server-i386.iso
+- eth0 is primary network interface
+- hostname: bismark-simulcast
+- partition entire disk as guided, no LVM
+- user: bismark/bismark
+- no disk encryption
+- apply security updates automatically
+- openssh server
+- install GRUB in MBR
+
+##### OS post-install configuration
+- edit /etc/network/interfaces to contain the following:
+
+        auto eth0
+        iface eth0 inet dhcp
+
+        auto eth1
+        iface eth1 inet dhcp
+
+- install packages:
+    - vlan
+    - fping
+
+##### Copy/"install" upgrade software
+    ssh bismark@192.168.56.101 mkdir /home/bismark/bin
+    scp /bin/*.py /bin/config_vlans.sh bismark@192.168.56.101:~/bin/
+
+##### Configure the OS networking stack
+- edit the config params near the top of config\_vlans.sh
+- run `sudo config_vlans.sh` (this is why you want to use a VM)
+- if you make an error or need to reconfigure, just repeat the above
+
+##### Testing configuration
+
+Run the following command: `watch -n 2 "fping -t 50 -r 1 -g 192.168.2.0/26 2>
+/dev/null"`.
+
+You should observe live-ness from the IP addresses corresponding to ports on
+the switch with routers connected:
+
+    Every 2.0s: fping -t 50 -r 1 -g 192.168.2.0/26 2> /dev/null
+
+    192.168.2.2 is alive
+    192.168.2.12 is alive
+    192.168.2.0 is unreachable
+    192.168.2.1 is unreachable
+    ...
+
+
+### 3. Running the upgrader
+
+#### wndr3700v2\_factory\_upgrade.py
+
+`wndr3700v2_factory_upgrade.py` is the tool that actually does the HTTP-based
+firmware upgrade on a Netgear router with the factory firmware. One instance of
+this program will flash one router. It is invoked as follows:
+
+    wndr3700v2_factory_upgrade.py PATH_TO_FIRMWARE_FILE FACTORY_IP_ADDRESS FLASHED_IP_ADDRESS
+
+The arguments are as follows:
+
+- PATH\_TO\_FIRMWARE\_FILE: the path to the factory (non-sysupgrade) file to be
+  flashed on the router
+- FACTORY\_IP\_ADDRESS: the IP address of the router to flash. In the case of
+  the WNDR3700v2, it will be `192.168.1.<switch_port_number>`
+- FLASHED\_IP\_ADDRESS: the IP address of the router after it is flashed and
+  restarted. In the case of Bismark, this will probably be
+  `192.168.42.<switch_port_number>`
+
+_Note that the factory and flashed IP addresses are dependent on you
+configuring the vlan interfaces and routing table properly using the
+config\_vlans.sh script_
+
+##### Example invocation
+
+An example invocation for Bismark might be the following (for the device on
+switch port 9):
+
+    wndr3700v2_factory_upgrade.py openwrt-ar71xx-generic-wndr3700v2-jffs2-factory-NA.img 192.168.1.9 192.168.42.9
+
+This assumes that the LAN subnet for the factory firmware is 192.168.1.0/24 and
+the LAN subnet for the Bismark firmware is 192.168.42.0/24, again configured in
+config\_vlans.sh.
