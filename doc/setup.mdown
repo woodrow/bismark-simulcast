@@ -113,7 +113,7 @@ effort.
 
 ##### Copy/"install" upgrade software
     ssh bismark@192.168.56.101 mkdir /home/bismark/bin
-    scp /bin/*.py /bin/config_vlans.sh bismark@192.168.56.101:~/bin/
+    scp bin/*.py /bin/config_vlans.sh bismark@192.168.56.101:~/bin/
 
 ##### Configure the OS networking stack
 - edit the config params near the top of config\_vlans.sh
