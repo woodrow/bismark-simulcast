@@ -117,6 +117,9 @@ effort.
 
 ##### Configure the OS networking stack
 - edit the config params near the top of config\_vlans.sh
+    - NUM\_VLANS
+    - SUBNETS
+    - HOST\_BRIDGE\_IF\_NAME
 - run `sudo config_vlans.sh` (this is why you want to use a VM)
 - if you make an error or need to reconfigure, just repeat the above
 
