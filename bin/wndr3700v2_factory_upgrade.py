@@ -10,6 +10,7 @@ import re
 
 INCLUDE_COUNTDOWN = False
 APPROVED_FIRMWARE_VERSIONS = [
+    'V1.0.0.6NA',
     'V1.0.0.10NA',
     ]
 
