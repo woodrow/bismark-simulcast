@@ -170,9 +170,16 @@ def main():
         else:
             break
 
+    # Get LAN interface MAC addresses
+    output = subprocess.check_output(('sshpass -p bismark123 '
+        'ssh -o StrictHostKeyChecking=no '
+        'root@%s /usr/sbin/ip link show eth0') % args.flashed_ip, shell=True)
+    lan_mac = re.search("link/ether ([^ ]*) ", output).groups()[0]
+
     # Done
-    print(("Upgrade of router %s (now known as %s) complete." %
-        (args.factory_ip, args.flashed_ip)))
+    print(("Upgrade of router %s complete. eth0 MAC address: %s" %
+        (args.flashed_ip, lan_mac)))
+    time.sleep(1000)
 
 
 def verify_ipv4_str(s):
