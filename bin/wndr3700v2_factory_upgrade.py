@@ -7,6 +7,7 @@ import subprocess
 import MultipartPostHandler
 import time
 import re
+import os
 
 INCLUDE_COUNTDOWN = False
 APPROVED_FIRMWARE_VERSIONS = [
@@ -14,6 +15,9 @@ APPROVED_FIRMWARE_VERSIONS = [
     'V1.0.0.10NA',
     ]
 
+# make stdout unbuffered
+unbuf_stdout = os.fdopen(sys.stdout.fileno(), 'w', 0)
+sys.stdout = unbuf_stdout
 
 def main():
     # Parse commmand-line arguments
