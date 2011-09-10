@@ -81,7 +81,10 @@ def main():
 
     # POST the firmware to the router
     print("Uploading firmware to router %s" % args.factory_ip)
-    form_data={'Upgrade': 'Upload', 'mtenFWUpload': args.firmware_file}
+    form_data = {
+        'Upgrade': 'Upload',
+        'mtenFWUpload': args.firmware_file
+        }
     response = opener.open('http://%s/upgrade_check.cgi' % args.factory_ip,
         data=form_data)
     if response.code != 200:
@@ -97,7 +100,7 @@ def main():
     if response.code != 200:
         raise Exception(("GET http://%s/UPG_version.cgi received a HTTP "
             "status %d response.") % (args.factory_ip, response.code))
-    if not re.search('var module_name=\"WNDR3700v2\"',''.join(lines)):
+    if not re.search('var module_name=\"WNDR3700v2\"', ''.join(lines)):
         raise Exception("Firmware module name didn't seem to register with "
             "router.")
     # ---------------------------------
@@ -121,7 +124,7 @@ def main():
             "status %d response.") % (args.factory_ip, response.code))
 
     # GET /UPG_process.htm; check status until it reaches 1100
-    var_status = 1000;
+    var_status = 1000
     while var_status < 1100:
         try:
             response = opener.open(('http://%s/UPG_process.htm' %
