@@ -45,6 +45,11 @@ def main():
         raise Exception("This tool relies on 'fping'. Please install it from "
             "your package manager and try it again.")
 
+    # See if sshpass exists
+    if subprocess.call("sshpass -V > /dev/null", shell=True) > 0:
+        raise Exception("This tool relies on 'sshpass'. Please install it from "
+            "your package manager and try it again.")
+
     # Wait for the device to be on the network
     while subprocess.call("fping -a %s > /dev/null" % args.factory_ip,
         shell=True) > 0:
