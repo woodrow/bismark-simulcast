@@ -41,17 +41,17 @@ def main():
     args = aparser.parse_args()
 
     # See if fping exists
-    if subprocess.call("fping -v &> /dev/null", shell=True) > 0:
+    if subprocess.call("fping -v > /dev/null 2>&1", shell=True) > 0:
         raise Exception("This tool relies on 'fping'. Please install it from "
             "your package manager and try it again.")
 
     # See if sshpass exists
-    if subprocess.call("sshpass -V &> /dev/null", shell=True) > 0:
+    if subprocess.call("sshpass -V > /dev/null 2>&1", shell=True) > 0:
         raise Exception("This tool relies on 'sshpass'. Please install it from "
             "your package manager and try it again.")
 
     # Wait for the device to be on the network
-    while subprocess.call("fping -a %s &> /dev/null" % args.factory_ip,
+    while subprocess.call("fping -a %s > /dev/null 2>&1" % args.factory_ip,
         shell=True) > 0:
         print("Waiting for router %s..." % args.factory_ip)
 
@@ -184,8 +184,7 @@ def main():
 #    lan_mac = re.search("link/ether ([^ ]*) ", output).groups()[0]
 
     # Done
-    print(("Upgrade of router %s complete. eth0 MAC address: %s" %
-        (args.flashed_ip, lan_mac)))
+    print("Upgrade of router %s complete." % args.flashed_ip)
     time.sleep(1000)
 
 
