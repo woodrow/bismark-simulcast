@@ -21,7 +21,7 @@
 # NUM_VLANS is the number of VLANs you wish to use for flashing. For an N-port
 #           switch, this should be set to N-1 (i.e. NUM_VLANS=47 for a 48-port
 #           switch).
-NUM_VLANS=12
+NUM_VLANS=47
 
 # SUBNETS is an array of networks that the devices being programmed will be
 #         expected to occupy. This will normally be two ranges for flashing
@@ -31,7 +31,7 @@ NUM_VLANS=12
 #         routers that will not undergo a configuration change, this can be
 #         reduced to a single network representing the router's actual
 #         configuration.
-SUBNETS=("192.168.2.0/24" "192.168.42.0/24")
+SUBNETS=("192.168.1.0/24" "192.168.142.0/24")
 
 # HOST_BRIDGE_IF_NAME is the name of the device that is bridged to the ethernet
 #                     port on the host that connects to the trunk port on the
