@@ -15,6 +15,7 @@ def router_flasher_worker(status_q, fw_path, pre_ip, post_ip, worker_id):
     flash_proc = subprocess.Popen(('python wndr3700v2_factory_upgrade.py '
         '%s %s %s' % (fw_path, str(pre_ip), str(post_ip))),
         shell=True,
+        stderr=subprocess.STDOUT,
         stdout=subprocess.PIPE,
         bufsize=1)
 
