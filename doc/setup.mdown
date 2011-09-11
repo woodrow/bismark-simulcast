@@ -110,6 +110,7 @@ effort.
 - install packages:
     - vlan
     - fping
+    - sshpass
 
 ##### Copy/"install" upgrade software
     ssh bismark@192.168.56.101 mkdir /home/bismark/bin
