@@ -41,17 +41,17 @@ def main():
     args = aparser.parse_args()
 
     # See if fping exists
-    if subprocess.call("fping -v > /dev/null", shell=True) > 0:
+    if subprocess.call("fping -v &> /dev/null", shell=True) > 0:
         raise Exception("This tool relies on 'fping'. Please install it from "
             "your package manager and try it again.")
 
     # See if sshpass exists
-    if subprocess.call("sshpass -V > /dev/null", shell=True) > 0:
+    if subprocess.call("sshpass -V &> /dev/null", shell=True) > 0:
         raise Exception("This tool relies on 'sshpass'. Please install it from "
             "your package manager and try it again.")
 
     # Wait for the device to be on the network
-    while subprocess.call("fping -a %s > /dev/null" % args.factory_ip,
+    while subprocess.call("fping -a %s &> /dev/null" % args.factory_ip,
         shell=True) > 0:
         print("Waiting for router %s..." % args.factory_ip)
 
@@ -157,7 +157,7 @@ def main():
             time_remaining -= sleep_interval
 
     # Wait for the device to appear again under its new IP address
-    while subprocess.call("fping -a %s > /dev/null" % args.flashed_ip,
+    while subprocess.call("fping -a %s &> /dev/null" % args.flashed_ip,
         shell=True) > 0:
         print("Waiting for router %s ECHO_REPLY..." % args.flashed_ip)
 
