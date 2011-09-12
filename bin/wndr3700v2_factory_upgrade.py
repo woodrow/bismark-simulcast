@@ -167,13 +167,15 @@ def main():
             response = urllib2.urlopen(
                 url='http://%s' % args.flashed_ip,
                 timeout=2)
+            if re.search('bismark', ''.join(response.readlines()).lower(), re.I):
+                break
+            print("Waiting for router %s web interface..." % args.flashed_ip)
+            time.sleep(5)
         except urllib2.HTTPError:
             break
         except urllib2.URLError:
             print("Waiting for router %s web interface..." % args.flashed_ip)
             time.sleep(5)
-        else:
-            break
 
 # THIS DOESN'T WORK SO WELL RIGHT NOW
 #
