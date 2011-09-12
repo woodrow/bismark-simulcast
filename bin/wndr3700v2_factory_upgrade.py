@@ -157,7 +157,7 @@ def main():
             time_remaining -= sleep_interval
 
     # Wait for the device to appear again under its new IP address
-    while subprocess.call("fping -a %s &> /dev/null" % args.flashed_ip,
+    while subprocess.call("fping -a %s > /dev/null 2>&1" % args.flashed_ip,
         shell=True) > 0:
         print("Waiting for router %s ECHO_REPLY..." % args.flashed_ip)
 
