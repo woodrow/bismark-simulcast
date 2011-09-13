@@ -7,6 +7,7 @@ import time
 import curses
 import math
 import argparse
+import sys
 
 # local module
 import netaddr
@@ -124,4 +125,6 @@ def verify_ip_net(s):
     return prefix
 
 if __name__ == '__main__':
+    print("This is currently unfit for human consumption.")
+    sys.exit()
     main()
