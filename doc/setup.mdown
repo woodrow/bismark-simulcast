@@ -45,9 +45,12 @@ the 48-port Pronto switch.
 192.168.1.2 with a subnet mask suitable for the 192.168.1.0/24 network
 (255.255.255.0).
 
-3. Copy the configuration file to the switch with the following shell command:
+3. Copy the configuration file to the switch with the following shell command
+(depending on the XorPlus version):
 
-        scp switch_config/pronto/pica_48port_trunkedvlans.conf root@192.168.1.1:/cf_card/CONFIG/pica_startup.boot
+    * Version 1.0: `scp switch_config/pronto/xorplus-1.0_48port_trunkedvlans.conf root@192.168.1.1:/cf_card/CONFIG/pica_startup.boot`
+
+    * Version 1.2: `scp switch_config/pronto/xorplus-1.2_48port_trunkedvlans.conf root@192.168.1.1:/pica/config/pica_startup.boot`
 
     The password, when requested, is `pica8`.
 
