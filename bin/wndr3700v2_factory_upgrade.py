@@ -20,6 +20,11 @@ unbuf_stdout = os.fdopen(sys.stdout.fileno(), 'w', 0)
 sys.stdout = unbuf_stdout
 
 def main():
+    # See if fping exists
+    if subprocess.call("fping -v > /dev/null 2>&1", shell=True) > 0:
+        raise Exception("This tool relies on 'fping'. Please install it from "
+            "your package manager and try it again.")
+
     # Parse commmand-line arguments
     aparser = argparse.ArgumentParser(
         description="Upgrade a Netgear WNDR3700v2's firmware")
@@ -40,15 +45,11 @@ def main():
         help='the IP address the router will have once flashed')
     args = aparser.parse_args()
 
-    # See if fping exists
-    if subprocess.call("fping -v > /dev/null 2>&1", shell=True) > 0:
-        raise Exception("This tool relies on 'fping'. Please install it from "
-            "your package manager and try it again.")
+    while True:
+        flash_router(args)
 
-    # See if sshpass exists
-    if subprocess.call("sshpass -V > /dev/null 2>&1", shell=True) > 0:
-        raise Exception("This tool relies on 'sshpass'. Please install it from "
-            "your package manager and try it again.")
+
+def flash_router(args):
 
     # Wait for the device to be on the network
     while subprocess.call("fping -a %s > /dev/null 2>&1" % args.factory_ip,
@@ -177,18 +178,12 @@ def main():
             print("Waiting for router %s web interface..." % args.flashed_ip)
             time.sleep(5)
 
-# THIS DOESN'T WORK SO WELL RIGHT NOW
-#
-#    # Get LAN interface MAC addresses
-#    output = subprocess.check_output(('sshpass -p bismark123 '
-#        'ssh -o StrictHostKeyChecking=no '
-#        'root@%s /usr/sbin/ip link show eth0') % args.flashed_ip, shell=True)
-#    lan_mac = re.search("link/ether ([^ ]*) ", output).groups()[0]
-
-    # Done
-    print("Upgrade of router %s complete." % args.flashed_ip)
-    time.sleep(1000)
-
+    # Done. Wait for the device to be disconnected.
+    while subprocess.call("fping -a %s > /dev/null 2>&1" % args.flashed_ip,
+            shell=True) == 0:
+        print("Upgrade of router %s complete.\nDisconnect to proceed with "
+            "flashing the next router or Ctrl-C to quit." % args.flashed_ip)
+        time.sleep(5)
 
 def verify_ipv4_str(s):
     try:
