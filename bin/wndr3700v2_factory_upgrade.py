@@ -53,8 +53,9 @@ def flash_router(args):
 
     # Wait for the device to be on the network
     while subprocess.call("fping -a %s > /dev/null 2>&1" % args.factory_ip,
-        shell=True) > 0:
+            shell=True) > 0:
         print("Waiting for router %s..." % args.factory_ip)
+        time.sleep(2)
 
     # Check version
     while True:
@@ -64,6 +65,7 @@ def flash_router(args):
                 timeout=2)
         except urllib2.URLError:
             print("Waiting for router %s..." % args.factory_ip)
+            time.sleep(2)
         else:
             break
     if response.code != 200:
@@ -159,8 +161,9 @@ def flash_router(args):
 
     # Wait for the device to appear again under its new IP address
     while subprocess.call("fping -a %s > /dev/null 2>&1" % args.flashed_ip,
-        shell=True) > 0:
+            shell=True) > 0:
         print("Waiting for router %s ECHO_REPLY..." % args.flashed_ip)
+        time.sleep(2)
 
     # Wait for the web interface to come up
     while True:
@@ -168,7 +171,8 @@ def flash_router(args):
             response = urllib2.urlopen(
                 url='http://%s' % args.flashed_ip,
                 timeout=2)
-            if re.search('bismark', ''.join(response.readlines()).lower(), re.I):
+            if re.search('bismark', ''.join(response.readlines()).lower(),
+                    re.I):
                 break
             print("Waiting for router %s web interface..." % args.flashed_ip)
             time.sleep(5)
