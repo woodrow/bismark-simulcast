@@ -53,13 +53,25 @@ ip rule add from all lookup default pref 32767
 # clear ARP cache
 ip neighbor flush nud permanent
 
-# set up interfaces
+#-------------------------------------------------------------------------------
+# Configure interfaces
+#-------------------------------------------------------------------------------
+
 for ((i=2; i<=6; i++))  # hardcoded for galapagos eth2..eth6
 do
     VIF="eth$i"
+
     ifconfig $VIF down
     ifconfig $VIF up
     ip addr flush dev $VIF
+
+    # Set up egress (root) qdisc
+    tc qdisc del dev $VIF root &> /dev/null
+    tc qdisc add dev $VIF root handle $i: htb
+
+    # Set up ingress qdisc
+    tc qdisc del dev $VIF ingress &> /dev/null
+    tc qdisc add dev $VIF ingress
 done
 
 #-------------------------------------------------------------------------------
@@ -100,7 +112,7 @@ do
         # the gateway address
         VIF_ADDR_HEX=$(printf '%02x' ${VIF_ADDR//./ })
         GW_ADDR_HEX=$(printf '%02x' ${GW_ADDR//./ })
-        tc filter add dev $VIF parent $VLAN_ID: pref $[++IPROUTE_PRIO] \
+        tc filter add dev $VIF parent $i: pref $[++IPROUTE_PRIO] \
             protocol arp \
             u32 \
             match u32 0x$VIF_ADDR_HEX 0xffffffff at 24 \
@@ -127,7 +139,7 @@ do
         # Rewrite source address of outgoing packets
         # TODO: this may not be necessary -- test?
         # action nat egress = rewrite src addr
-        tc filter add dev $VIF parent $VLAN_ID: pref $[++IPROUTE_PRIO] \
+        tc filter add dev $VIF parent $i: pref $[++IPROUTE_PRIO] \
             protocol ip \
             u32 match ip dst $VIF_ADDR \
             action nat egress 0.0.0.0/0 $IF_ADDR \
@@ -138,7 +150,7 @@ do
 
         # Rewrite destination address of outgoing packets
         # action nat ingress = rewrite dst addr
-        tc filter add dev $VIF parent $VLAN_ID: pref $[++IPROUTE_PRIO] \
+        tc filter add dev $VIF parent $i: pref $[++IPROUTE_PRIO] \
             protocol ip \
             u32 match ip dst $VIF_ADDR \
             action nat ingress $VIF_ADDR $GW_ADDR \
