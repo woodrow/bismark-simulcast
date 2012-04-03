@@ -53,6 +53,15 @@ ip rule add from all lookup default pref 32767
 # clear ARP cache
 ip neighbor flush nud permanent
 
+# set up interfaces
+for ((i=2; i<=6; i++))  # hardcoded for galapagos eth2..eth6
+do
+    VIF="eth$i"
+    ifconfig $VIF down
+    ifconfig $VIF up
+    ip addr flush dev $VIF
+done
+
 #-------------------------------------------------------------------------------
 # Configure routing
 #-------------------------------------------------------------------------------
