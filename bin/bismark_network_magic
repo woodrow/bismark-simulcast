@@ -1,0 +1,286 @@
+#! /bin/sh
+
+### BEGIN INIT INFO
+# Provides:          bismark_network_magic
+# Required-Start:    $all
+# Required-Stop:
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: Steve Woodrow's magic network config for BISmark
+### END INIT INFO
+
+PATH=/sbin:/bin:/usr/sbin:/usr/bin
+
+set -o nounset
+
+usage() {
+    echo "Usage: $0 {start|stop|usage}" >&2
+    exit 1
+}
+
+INTERFACES="eth3 \
+            eth4 \
+            eth5 \
+            eth6"
+SUBNETS="192.168.1.0/24 \
+         192.168.42.0/24 \
+         192.168.142.0/24"
+
+start() {
+    if [ "$(id -ru)" -ne 0 ]; then
+        echo "You must be root. Re-run with sudo."
+        exit 1
+    fi
+
+    echo -n "Starting bismark_network_magic: "
+
+    # INITIAL SETUP #######################################################
+    # enable forwarding
+    echo 1 > /proc/sys/net/ipv4/ip_forward
+
+    # enable iptables NAT
+    modprobe iptable_nat
+
+    # clear iptables
+    iptables -t nat --flush
+
+    # clear routing tables
+    for TABLENUM in $(ip route show table all | grep -o "table [0-9]\+" |
+        grep -o "[0-9]\+" | sort | uniq)
+    do
+        ip route flush proto static table $TABLENUM
+    done
+
+    # clear policy routing table
+    ip rule flush
+    ip rule add from all lookup main pref 32766
+    ip rule add from all lookup default pref 32767
+
+    # clear ARP cache
+    ip neighbor flush nud permanent
+
+    # CONFIGURE INTERFACES ################################################
+    for IFNAME in $INTERFACES
+    do
+        i=$(echo $IFNAME | grep -E -o '[0-9]+$')
+
+        ifconfig $IFNAME down
+        ifconfig $IFNAME up
+        ip addr flush dev $IFNAME
+
+        # Set up egress (root) qdisc
+        tc qdisc del dev $IFNAME root > /dev/null 2>&1 
+        tc qdisc add dev $IFNAME root handle $i: htb
+
+        # Set up ingress qdisc
+        tc qdisc del dev $IFNAME ingress > /dev/null 2>&1 
+        tc qdisc add dev $IFNAME ingress
+    done
+
+    # CONFIGURE ROUTING ###################################################
+
+    # This is a unique preference/priority value for the various tc rules
+    IPROUTE_PRIO=100
+
+    TABLE=0
+    for SUBNET in $SUBNETS
+    do
+        TABLE=$(($TABLE+1))
+        # TODO: OCTETS is currently hard-coded for a /24
+        OCTETS=$(echo $SUBNET | grep -o "\([0-9]\+\.\)\{2\}[0-9]\+")
+
+        ip rule add to $SUBNET table $TABLE
+
+        for IFNAME in $INTERFACES
+        do
+            i=$(echo $IFNAME | grep -E -o '[0-9]+$')
+            VIF_ADDR=$OCTETS.$i
+            IF_ADDR=$OCTETS.254
+            GW_ADDR=$OCTETS.1
+
+            # Add generic on-subnet interface address (IF_ADDR) to interface.
+            # This will appear as the source address for ARP requests and IP
+            # packets directed at the device being flashed.
+            ip addr add $IF_ADDR/32 dev $IFNAME label $IFNAME:$TABLE
+
+            # Add route to the device-specific on-subnet address (VIF_ADDR) via the
+            # appropriate VLAN interface and with the appropriate source address
+            # on that interface.
+            ip route add $VIF_ADDR/32 dev $IFNAME src $IF_ADDR \
+                protocol static metric 20 table $TABLE
+
+            # Rewrite outgoing ARP to set requested (who-has) address to
+            # the gateway address
+            VIF_ADDR_HEX=$(printf '%02x' $(echo $VIF_ADDR | sed 's/\./ /g'))
+            GW_ADDR_HEX=$(printf '%02x' $(echo $GW_ADDR | sed 's/\./ /g'))
+            IPROUTE_PRIO=$(($IPROUTE_PRIO+1))
+            tc filter add dev $IFNAME parent $i: pref $IPROUTE_PRIO \
+                protocol arp \
+                u32 \
+                match u32 0x$VIF_ADDR_HEX 0xffffffff at 24 \
+                action pedit \
+                munge offset 24 u32 set 0x$GW_ADDR_HEX \
+                > /dev/null
+
+            # Rewrite incoming ARP to set reply address from the gateway to
+            # the VIF's address
+            VIF_ADDR_UHEX=$(echo -n $VIF_ADDR_HEX | head -c 4)
+            VIF_ADDR_LHEX=$(echo -n $VIF_ADDR_HEX | tail -c 4)
+            GW_ADDR_UHEX=$(echo -n $GW_ADDR_HEX | head -c 4)
+            GW_ADDR_LHEX=$(echo -n $GW_ADDR_HEX | tail -c 4)
+            IPROUTE_PRIO=$(($IPROUTE_PRIO+1))
+            tc filter add dev $IFNAME parent ffff: pref $IPROUTE_PRIO \
+                protocol arp \
+                u32 \
+                match u16 0x$GW_ADDR_UHEX 0xffff at 14 \
+                match u16 0x$GW_ADDR_LHEX 0xffff at 16 \
+                action pedit \
+                munge offset 14 u16 set 0x$VIF_ADDR_UHEX \
+                munge offset 16 u16 set 0x$VIF_ADDR_LHEX \
+                > /dev/null
+
+            # Rewrite source address of outgoing packets
+            # TODO: this may not be necessary -- test?
+            # action nat egress = rewrite src addr
+            IPROUTE_PRIO=$(($IPROUTE_PRIO+1))
+            tc filter add dev $IFNAME parent $i: pref $IPROUTE_PRIO \
+                protocol ip \
+                u32 match ip dst $VIF_ADDR \
+                action nat egress 0.0.0.0/0 $IF_ADDR \
+                continue
+            # action nat egress $HOST_BRIDGE_IF_ADDR $OCTETS.254 \
+            # this should probably be action nat egress 0.0.0.0/0 ..., but this
+            # is a work around
+
+            # Rewrite destination address of outgoing packets
+            # action nat ingress = rewrite dst addr
+            IPROUTE_PRIO=$(($IPROUTE_PRIO+1))
+            tc filter add dev $IFNAME parent $i: pref $IPROUTE_PRIO \
+                protocol ip \
+                u32 match ip dst $VIF_ADDR \
+                action nat ingress $VIF_ADDR $GW_ADDR \
+                pass
+
+            ## Rewrite destination address of incoming packets
+            ## action nat ingress = rewrite dst addr
+            #IPROUTE_PRIO=$(($IPROUTE_PRIO+1))
+            #tc filter add dev $IFNAME parent ffff: pref $IPROUTE_PRIO \
+            #protocol ip \
+            #u32 match ip src $GW_ADDR \
+            #action nat ingress $IF_ADDR $HOST_BRIDGE_IF_ADDR \
+            #continue
+            ## this could probably be action nat ingress 0.0.0.0/0 ..., but this
+            ## is a work around
+
+            # Rewrite source address of incoming packets
+            # action nat egress = rewrite src addr
+            IPROUTE_PRIO=$(($IPROUTE_PRIO+1))
+            tc filter add dev $IFNAME parent ffff: pref $IPROUTE_PRIO \
+                protocol ip \
+                u32 match ip src $GW_ADDR \
+                action nat egress $GW_ADDR $VIF_ADDR \
+                pass
+        done
+    done
+
+    # Flush the routing cache to ensure all changes are active
+    ip route flush cache
+
+    touch /var/run/bismark_magic_enabled
+    # DONE ################################################################
+    echo "Done."
+}
+
+stop() {
+    if [ "$(id -ru)" -ne 0 ]; then
+        echo "You must be root. Re-run with sudo."
+        exit 1
+    fi
+
+    echo -n "Stopping bismark_network_magic: "
+    # INITIAL SETUP #######################################################
+    # clear iptables
+    iptables -t nat --flush
+
+    # clear routing tables
+    for TABLENUM in $(ip route show table all | grep -o "table [0-9]\+" |
+        grep -o "[0-9]\+" | sort | uniq)
+    do
+        ip route flush proto static table $TABLENUM
+    done
+
+    # clear policy routing table
+    ip rule flush
+    ip rule add from all lookup main pref 32766
+    ip rule add from all lookup default pref 32767
+
+    # clear ARP cache
+    ip neighbor flush nud permanent
+
+    # CONFIGURE ROUTING ###################################################
+    TABLE=0
+    for SUBNET in $SUBNETS
+    do
+        TABLE=$(($TABLE+1))
+        # TODO: OCTETS is currently hard-coded for a /24
+        OCTETS=$(echo $SUBNET | grep -o "\([0-9]\+\.\)\{2\}[0-9]\+")
+
+        for IFNAME in $INTERFACES
+        do
+            i=$(echo $IFNAME | grep -E -o '[0-9]+$')
+            VIF_ADDR=$OCTETS.$i
+            IF_ADDR=$OCTETS.254
+            GW_ADDR=$OCTETS.1
+
+            ip addr del $IF_ADDR/32 dev $IFNAME
+        done
+    done
+
+    # Flush the routing cache to ensure all changes are active
+    ip route flush cache
+
+    # CONFIGURE INTERFACES ################################################
+    for IFNAME in $INTERFACES
+    do
+        i=$(echo $IFNAME | grep -E -o '[0-9]+$')
+
+        # Set up egress (root) qdisc
+        tc qdisc del dev $IFNAME root > /dev/null 2>&1
+
+        # Set up ingress qdisc
+        tc qdisc del dev $IFNAME ingress > /dev/null 2>&1
+
+        ip addr flush dev $IFNAME
+        ifconfig $IFNAME down
+    done
+
+
+    rm -f /var/run/bismark_magic_enabled
+    # DONE ################################################################
+    echo "Done."
+}
+
+if [ -z ${1:-} ]; then
+    usage
+fi
+
+case "$1" in
+    start)
+        start
+    ;;
+    stop)
+        stop
+    ;;
+    restart)
+        stop
+        start
+    ;;
+    status)
+        [ -f /var/run/bismark_magic_enabled ] && exit 0 || exit 3
+    ;;
+    *)
+        usage
+    ;;
+esac
+
+exit 0
