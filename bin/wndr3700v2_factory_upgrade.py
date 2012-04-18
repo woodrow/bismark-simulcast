@@ -20,11 +20,6 @@ unbuf_stdout = os.fdopen(sys.stdout.fileno(), 'w', 0)
 sys.stdout = unbuf_stdout
 
 def main():
-    # See if fping exists
-    if subprocess.call("fping -v > /dev/null 2>&1", shell=True) > 0:
-        raise Exception("This tool relies on 'fping'. Please install it from "
-            "your package manager and try it again.")
-
     # Parse commmand-line arguments
     aparser = argparse.ArgumentParser(
         description="Upgrade a Netgear WNDR3700v2's firmware")
@@ -52,8 +47,8 @@ def main():
 def flash_router(args):
 
     # Wait for the device to be on the network
-    while subprocess.call("fping -a %s > /dev/null 2>&1" % args.factory_ip,
-            shell=True) > 0:
+    while subprocess.call("ping -c 1 -w 2 %s > /dev/null 2>&1" %
+            args.factory_ip, shell=True) > 0:
         print("Waiting for router %s..." % args.factory_ip)
         time.sleep(2)
 
@@ -160,8 +155,8 @@ def flash_router(args):
             time_remaining -= sleep_interval
 
     # Wait for the device to appear again under its new IP address
-    while subprocess.call("fping -a %s > /dev/null 2>&1" % args.flashed_ip,
-            shell=True) > 0:
+    while subprocess.call("ping -c 1 -w 2 %s > /dev/null 2>&1" %
+            args.flashed_ip, shell=True) > 0:
         print("Waiting for router %s ECHO_REPLY..." % args.flashed_ip)
         time.sleep(2)
 
@@ -183,8 +178,8 @@ def flash_router(args):
             time.sleep(5)
 
     # Done. Wait for the device to be disconnected.
-    while subprocess.call("fping -a %s > /dev/null 2>&1" % args.flashed_ip,
-            shell=True) == 0:
+    while subprocess.call("ping -c 1 -w 2 %s > /dev/null 2>&1" %
+            args.flashed_ip, shell=True) == 0:
         print("Upgrade of router %s complete.\nDisconnect to proceed with "
             "flashing the next router or Ctrl-C to quit." % args.flashed_ip)
         time.sleep(5)
