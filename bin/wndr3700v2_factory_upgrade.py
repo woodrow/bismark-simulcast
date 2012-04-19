@@ -23,22 +23,22 @@ sys.stdout = unbuf_stdout
 def main():
     # Parse commmand-line arguments
     aparser = argparse.ArgumentParser(
-        description="Upgrade a Netgear WNDR3700v2's firmware")
+            description="Upgrade a Netgear WNDR3700v2's firmware")
     aparser.add_argument(
-        'firmware_file',
-        type=argparse.FileType('rb'),
-        metavar='FIRMWARE_PATH',
-        help='the path to the firmware image (.img)')
+            'firmware_file',
+            type=argparse.FileType('rb'),
+            metavar='FIRMWARE_PATH',
+            help='the path to the firmware image (.img)')
     aparser.add_argument(
-        'factory_ip',
-        type=verify_ipv4_str,
-        metavar='FACTORY_IP_ADDR',
-        help='the IP address of the router to flash')
+            'factory_ip',
+            type=verify_ipv4_str,
+            metavar='FACTORY_IP_ADDR',
+            help='the IP address of the router to flash')
     aparser.add_argument(
-        'flashed_ip',
-        type=verify_ipv4_str,
-        metavar='FLASHED_IP_ADDR',
-        help='the IP address the router will have once flashed')
+            'flashed_ip',
+            type=verify_ipv4_str,
+            metavar='FLASHED_IP_ADDR',
+            help='the IP address the router will have once flashed')
     args = aparser.parse_args()
 
     while True:
@@ -48,7 +48,8 @@ def main():
 def flash_router(args):
 
     # Wait for the device to be on the network
-    while subprocess.call("ping -c 1 -w 2 %s > /dev/null 2>&1" %
+    while subprocess.call(
+            "ping -c 1 -w 2 %s > /dev/null 2>&1" %
             args.factory_ip, shell=True) > 0:
         print("Waiting for router %s..." % args.factory_ip)
         time.sleep(2)
@@ -57,43 +58,46 @@ def flash_router(args):
     while True:
         try:
             response = urllib2.urlopen(
-                url='http://%s/currentsetting.htm' % args.factory_ip,
-                timeout=2)
+                    url='http://%s/currentsetting.htm' % args.factory_ip,
+                    timeout=2)
         except urllib2.URLError:
             print("Waiting for router %s..." % args.factory_ip)
             time.sleep(2)
         else:
             break
     if response.code != 200:
-        raise Exception(("GET http://%s/currentsetting.htm received a HTTP "
-            "status %d response.") % (args.factory_ip, response.code))
+        raise Exception(
+                ("GET http://%s/currentsetting.htm received a HTTP "
+                "status %d response.") % (args.factory_ip, response.code))
     curr_config = dict(
-        [(x.split('=')[0], x.split('=')[1]) for x in
-            response.readlines()[0].split()])
+            [(x.split('=')[0], x.split('=')[1])
+            for x in response.readlines()[0].split()])
     if curr_config['Firmware'] not in APPROVED_FIRMWARE_VERSIONS:
-        raise Exception(("The current firmware on the router (version %s) has "
-            "not been tested with this tool. Try it by hand and then add it "
-            "to the APPROVED_FIRMWARE_VERSIONS list.") %
-            curr_config['Firmware'])
+        raise Exception(
+                ("The current firmware on the router (version %s) has "
+                "not been tested with this tool. Try it by hand and then add "
+                "it to the APPROVED_FIRMWARE_VERSIONS list.") %
+                curr_config['Firmware'])
 
     # Set up HTTP Basic authentication manager
     pwmgr = urllib2.HTTPPasswordMgrWithDefaultRealm()
     pwmgr.add_password(None, args.factory_ip, 'admin', 'password')
     auth_handler = urllib2.HTTPBasicAuthHandler(pwmgr)
-    opener = urllib2.build_opener(MultipartPostHandler.MultipartPostHandler,
-        auth_handler)
+    opener = urllib2.build_opener(
+            MultipartPostHandler.MultipartPostHandler, auth_handler)
 
     # POST the firmware to the router
     print("Uploading firmware to router %s" % args.factory_ip)
     form_data = {
-        'Upgrade': 'Upload',
-        'mtenFWUpload': args.firmware_file
-        }
-    response = opener.open('http://%s/upgrade_check.cgi' % args.factory_ip,
-        data=form_data)
+            'Upgrade': 'Upload',
+            'mtenFWUpload': args.firmware_file
+            }
+    response = opener.open(
+            'http://%s/upgrade_check.cgi' % args.factory_ip, data=form_data)
     if response.code != 200:
-        raise Exception(("POST http://%s/upgrade_check.cgi received a HTTP "
-            "status %d response.") % (args.factory_ip, response.code))
+        raise Exception(
+                ("POST http://%s/upgrade_check.cgi received a HTTP "
+                "status %d response.") % (args.factory_ip, response.code))
 
     # Wait the prescribed 1 second
     time.sleep(1)
@@ -102,11 +106,12 @@ def flash_router(args):
     response = opener.open('http://%s/UPG_version.htm' % args.factory_ip)
     lines = response.readlines()
     if response.code != 200:
-        raise Exception(("GET http://%s/UPG_version.cgi received a HTTP "
-            "status %d response.") % (args.factory_ip, response.code))
+        raise Exception(
+                ("GET http://%s/UPG_version.cgi received a HTTP "
+                "status %d response.") % (args.factory_ip, response.code))
     if not re.search('var module_name=\"WNDR3700v2\"', ''.join(lines)):
-        raise Exception("Firmware module name didn't seem to register with "
-            "router.")
+        raise Exception(
+                "Firmware module name didn't seem to register with router.")
     # ---------------------------------
     # var module_name="WNDR3700v2";
     # var new_version="V1.0.0.10";
@@ -121,26 +126,29 @@ def flash_router(args):
 
     # POST upgrade confirmation
     print("Initiating upgrade on router %s" % args.factory_ip)
-    response = opener.open('http://%s/upgrade.cgi' % args.factory_ip,
-        data={'upgrade_yes_no': '1'})
+    response = opener.open(
+            'http://%s/upgrade.cgi' % args.factory_ip,
+            data={'upgrade_yes_no': '1'})
     if response.code != 200:
-        raise Exception(("POST http://%s/upgrade.cgi received a HTTP "
-            "status %d response.") % (args.factory_ip, response.code))
+        raise Exception(
+                ("POST http://%s/upgrade.cgi received a HTTP "
+                "status %d response.") % (args.factory_ip, response.code))
 
     # GET /UPG_process.htm; check status until it reaches 1100
     var_status = 1000
     while var_status < 1100:
         try:
-            response = opener.open(('http://%s/UPG_process.htm' %
-                args.factory_ip), timeout=2)
+            response = opener.open(
+                    ('http://%s/UPG_process.htm' % args.factory_ip), timeout=2)
         except urllib2.URLError:
             break
         lines = response.readlines()
         if response.code != 200:
-            raise Exception(("GET http://%s/UPG_version.cgi received a HTTP "
-                "status %d response.") % (args.factory_ip, response.code))
-        var_status = int(re.search('var status = (\d+);',
-            ''.join(lines)).group(1))
+            raise Exception(
+                    ("GET http://%s/UPG_version.cgi received a HTTP "
+                    "status %d response.") % (args.factory_ip, response.code))
+        var_status = int(
+                re.search('var status = (\d+);', ''.join(lines)).group(1))
         print("Upgrade %d%% complete" % (var_status - 1000))
         time.sleep(5)
 
@@ -156,7 +164,8 @@ def flash_router(args):
             time_remaining -= sleep_interval
 
     # Wait for the device to appear again under its new IP address
-    while subprocess.call("ping -c 1 -w 2 %s > /dev/null 2>&1" %
+    while subprocess.call(
+            "ping -c 1 -w 2 %s > /dev/null 2>&1" %
             args.flashed_ip, shell=True) > 0:
         print("Waiting for router %s ECHO_REPLY..." % args.flashed_ip)
         time.sleep(2)
@@ -165,8 +174,8 @@ def flash_router(args):
     while True:
         try:
             response = urllib2.urlopen(
-                url='http://%s' % args.flashed_ip,
-                timeout=2)
+                    url='http://%s' % args.flashed_ip,
+                    timeout=2)
             content = ' '.join(response.readlines()).lower()
             if re.search('bismark', content, re.I):
                 if re.search('bismark-atlanta', content, re.I):  # klatch
@@ -182,10 +191,13 @@ def flash_router(args):
             time.sleep(5)
 
     # Done. Wait for the device to be disconnected.
-    while subprocess.call("ping -c 1 -w 2 %s > /dev/null 2>&1" %
+    while subprocess.call(
+            "ping -c 1 -w 2 %s > /dev/null 2>&1" %
             args.flashed_ip, shell=True) == 0:
-        print("Upgrade of router %s complete.\nDisconnect to proceed with "
-            "flashing the next router or Ctrl-C to quit." % args.flashed_ip)
+        print(
+                "Upgrade of router %s complete.\n"
+                "Disconnect to proceed with flashing the next router "
+                "or Ctrl-C to quit." % args.flashed_ip)
         time.sleep(5)
 
 def verify_ipv4_str(s):
@@ -203,14 +215,3 @@ def verify_ipv4_str(s):
 
 if __name__ == '__main__':
     main()
-
-
-
-
-
-
-
-# changing state:
-#   - call change_state(STATE_ENUM_TYPE)
-#       - change_state updates state locally and puts an update message into
-#         the queue to the master
