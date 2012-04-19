@@ -167,9 +167,12 @@ def flash_router(args):
             response = urllib2.urlopen(
                 url='http://%s' % args.flashed_ip,
                 timeout=2)
-            if re.search('bismark', ''.join(response.readlines()).lower(),
-                    re.I):
-                break
+            content = ' '.join(response.readlines()).lower()
+            if re.search('bismark', content, re.I):
+                if re.search('bismark-atlanta', content, re.I):  # klatch
+                    break
+                elif not re.search('UNSET_MAC', content, re.I):  # quirm
+                    break
             print("Waiting for router %s web interface..." % args.flashed_ip)
             time.sleep(5)
         except urllib2.HTTPError:
