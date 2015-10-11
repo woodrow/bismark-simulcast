@@ -2,6 +2,8 @@
 Stephen Woodrow<br />
 <srwoodrow@gmail.com>
 
+<a data-flickr-embed="true" href="https://www.flickr.com/photos/stevewoodrow/6134951731/in/photostream/" title="Flashing BISmark routers"><img src="https://farm7.staticflickr.com/6180/6134951731_ce6fdd71d2_b.jpg" width="640px" alt="Flashing BISmark routers"></a>
+
 ### Requirements
 
 - An ethernet switch supporting 802.1Q (VLANs)
